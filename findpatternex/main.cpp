@@ -2,8 +2,8 @@
 #include <stdio.h>
 
 #define InRange(x, a, b)    (x >= a && x <= b) 
-#define GetBits(x)		    (InRange(x, '0', '9') ? (x - '0') : ((x & (~0x20)) - 'A' + 0xa))
-#define GetByte(x)	        (GetBits(x[0]) << 4 | GetBits(x[1]))
+#define GetBits(x)          (InRange(x, '0', '9') ? (x - '0') : ((x & (~0x20)) - 'A' + 0xa))
+#define GetByte(x)          (GetBits(x[0]) << 4 | GetBits(x[1]))
 
 template <typename T>
 BOOL FindPatternEx(HANDLE hProcess, PBYTE pBaseAddress, DWORD dwSize, LPCSTR CONST lpPattern, DWORD dwOffset, T* pOut)
