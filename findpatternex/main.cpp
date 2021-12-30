@@ -1,55 +1,73 @@
 #include <Windows.h>
 #include <stdio.h>
 
-#define IN_RANGE( x, a, b )	  (x >= a && x <= b) 
-#define GET_BITS( x )		  (IN_RANGE(x, '0', '9') ? (x - '0') : ((x & (~0x20)) - 'A' + 0xa))
-#define GET_BYTE( x )		  (GET_BITS(x[0]) << 4 | GET_BITS(x[1]))
-
-typedef struct
-{
-    const char*     name;
-    const char*     pattern;
-    int             offset;
-    int             extra;
-} cl_signature_t;
+#define InRange(x, a, b)    (x >= a && x <= b) 
+#define GetBits(x)		    (InRange(x, '0', '9') ? (x - '0') : ((x & (~0x20)) - 'A' + 0xa))
+#define GetByte(x)	        (GetBits(x[0]) << 4 | GetBits(x[1]))
 
 template <typename T>
-T FindPatternEx(HANDLE hProcess, PBYTE pBaseAddress, DWORD dwSize, cl_signature_t* signature)
+BOOL FindPatternEx(HANDLE hProcess, PBYTE pBaseAddress, DWORD dwSize, LPCSTR CONST lpPattern, DWORD dwOffset, T* pOut)
 {
-    BYTE* buffer = new BYTE[dwSize];
-    if (!ReadProcessMemory(hProcess, (LPVOID)pBaseAddress, buffer, dwSize, NULL))
+    PBYTE pBuffer = new BYTE[dwSize];
+    if (!ReadProcessMemory(hProcess, (LPVOID)pBaseAddress, pBuffer, dwSize, NULL))
     {
-        printf_s("ReadProcessMemory failed (err: %d, line: %d)\n", GetLastError(), __LINE__);
-        return NULL;
+        delete[] pBuffer;
+        return FALSE;
     }
 
-    LPCBYTE pat = reinterpret_cast<LPCBYTE>(signature->pattern);
-    PBYTE   match = NULL;
+    LPCSTR lpAcc = lpPattern;
+    PBYTE  pMatch = NULL;
 
-    for (PBYTE current = buffer; current < buffer + dwSize; ++current)
+    for (PBYTE i = pBuffer; i < pBuffer + dwSize; ++i)
     {
-        if (*(PBYTE)pat == (BYTE)'\?' || *current == GET_BYTE(pat))
+        if (*lpAcc == '?' || *i == GetByte(lpAcc))
         {
-            if (!match) {
-                match = current;
-            }
-            pat += (*(PBYTE)pat != (BYTE)'\?' && *(PBYTE)(pat + 2) != '\0') ? 3 : 2;
-            if (!*pat)
+            if (!pMatch) pMatch = i;
+            lpAcc += (*lpAcc != '?') ? 3 : 2;
+            if (!*lpAcc)
             {
-                match = pBaseAddress + (match - buffer) + signature->offset;
+                *pOut = *(T*)(pBaseAddress + (pMatch - pBuffer) + dwOffset);
                 break;
             }
         }
-        else if (match)
+        else if (pMatch)
         {
-            current = match;
-            pat = reinterpret_cast<LPCBYTE>(signature->pattern);
-            match = NULL;
+            i = pMatch;
+            lpAcc = lpPattern;
+            pMatch = NULL;
         }
     }
 
-    delete[] buffer;
-    return (match != NULL) ? *(T*)match + signature->extra : NULL;
+    delete[] pBuffer;
+    return pMatch != NULL;
+}
+
+template <typename T>
+BOOL FindPattern(PBYTE pBaseAddress, DWORD dwSize, LPCSTR CONST lpPattern, DWORD dwOffset, T* pOut)
+{
+    LPCSTR lpAcc = lpPattern;
+    PBYTE  pMatch = NULL;
+
+    for (PBYTE i = pBaseAddress; i < pBaseAddress + dwSize; ++i)
+    {
+        if (*lpAcc == '?' || *i == GetByte(lpAcc))
+        {
+            if (!pMatch) pMatch = i;
+            lpAcc += (*lpAcc != '?') ? 3 : 2;
+            if (!*lpAcc)
+            {
+                *pOut = *(T*)(pMatch + dwOffset);
+                break;
+            }
+        }
+        else if (pMatch)
+        {
+            i = pMatch;
+            lpAcc = lpPattern;
+            pMatch = NULL;
+        }
+    }
+    return pMatch != NULL;
 }
 
 int main()
@@ -61,18 +79,12 @@ int main()
         0xF1, 0xAC, 0x20, 0x24, 0x64, 0xA4
     };
 
-    cl_signature_t signature =
-    {
-        "Pattern1",
-        "A3 FC ? ? ? ? F1 AC",
-        2,
-        0
-    };
+    DWORD dwOut;
+    if (FindPattern<DWORD>((PBYTE)&bytes, ARRAYSIZE(bytes), "A3 FC ? ? ? ? F1 AC", 2, &dwOut))
+        printf("FindPattern: %x\n", dwOut);
 
-    DWORD result = FindPatternEx<DWORD>(GetCurrentProcess(), (PBYTE)&bytes, ARRAYSIZE(bytes), &signature);
-    if (result)
-        printf("%s -> 0x%x", signature.name, result);
+    if (FindPatternEx<DWORD>(GetCurrentProcess(), (PBYTE)&bytes, ARRAYSIZE(bytes), "A3 FC ? ? ? ? F1 AC", 2, &dwOut))
+        printf("FindPatternEx: %x", dwOut);
 
-    getchar();
-    return FALSE;
+    return 0;
 }
