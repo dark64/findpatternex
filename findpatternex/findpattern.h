@@ -1,4 +1,6 @@
 #pragma once
+
+#include <stdlib.h>
 #include <Windows.h>
 
 #define InRange(x, a, b)    (x >= a && x <= b) 
@@ -8,10 +10,10 @@
 template <typename T>
 BOOL FindPatternEx(HANDLE hProcess, PBYTE pBaseAddress, DWORD dwSize, LPCSTR CONST lpPattern, DWORD dwOffset, T* pOut)
 {
-    PBYTE pBuffer = new BYTE[dwSize];
+    PBYTE pBuffer = (PBYTE)malloc(dwSize);
     if (!ReadProcessMemory(hProcess, (LPVOID)pBaseAddress, pBuffer, dwSize, NULL))
     {
-        delete[] pBuffer;
+        free(pBuffer);
         return FALSE;
     }
 
@@ -38,7 +40,7 @@ BOOL FindPatternEx(HANDLE hProcess, PBYTE pBaseAddress, DWORD dwSize, LPCSTR CON
         }
     }
 
-    delete[] pBuffer;
+    free(pBuffer);
     return pMatch != NULL;
 }
 
